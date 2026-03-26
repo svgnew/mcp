@@ -1,10 +1,10 @@
 {
   "name": "@svgnew/mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for svg.new — AI-powered image to SVG vectorization",
   "main": "src/server.ts",
   "bin": {
-    "svgnew-mcp": "./bin/cli.js"
+    "@svgnew/mcp": "./bin/cli.js"
   },
   "scripts": {
     "start": "tsx src/server.ts"
@@ -19,10 +19,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "tsx": "^4.0.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   }
 }

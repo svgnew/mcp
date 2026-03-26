@@ -1,3 +1,2 @@
-#!/usr/bin/env node
-require('tsx/cjs');
-require('../src/server.ts');
+#!/usr/bin/env tsx
+import '../src/server.ts';
