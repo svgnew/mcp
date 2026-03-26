@@ -1,15 +1,19 @@
 #!/usr/bin/env node
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+const { execFileSync } = require('child_process');
+const { join } = require('path');
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverPath = join(__dirname, '..', 'src', 'server.ts');
-const tsxPath = join(__dirname, '..', 'node_modules', '.bin', 'tsx');
+const tsxBin = join(__dirname, '..', 'node_modules', '.bin', 'tsx');
 
 try {
-  execFileSync(tsxPath, [serverPath], { stdio: 'inherit' });
+  execFileSync(tsxBin, [serverPath], { stdio: 'inherit' });
 } catch (e) {
-  // Try global tsx
-  execFileSync('npx', ['tsx', serverPath], { stdio: 'inherit' });
+  if (e.status) process.exit(e.status);
+  // Fallback: try npx tsx
+  try {
+    execFileSync('npx', ['--yes', 'tsx', serverPath], { stdio: 'inherit' });
+  } catch (e2) {
+    console.error('Failed to run MCP server. Ensure tsx is installed.');
+    process.exit(1);
+  }
 }
