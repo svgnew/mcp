@@ -1,0 +1,25 @@
+{
+  "name": "svg-new",
+  "version": "1.0.0",
+  "description": "Convert raster images to clean SVG vectors with svg.new",
+  "author": {
+    "name": "svg.new",
+    "url": "https://svg.new"
+  },
+  "homepage": "https://svg.new",
+  "license": "MIT",
+  "keywords": ["svg", "vectorize", "image-conversion", "design", "mcp"],
+  "mcpServers": "./.mcp.json",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "svg.new",
+    "shortDescription": "AI-powered image to SVG vectorization",
+    "longDescription": "Convert PNG, JPG, WebP images to clean SVG vectors. Includes recoloring, simplification, background removal, and batch processing. REST API and MCP server.",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://svg.new",
+    "brandColor": "#2E95FF",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png"
+  }
+}

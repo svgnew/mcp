@@ -1,0 +1,9 @@
+{
+  "svg-new": {
+    "command": "npx",
+    "args": ["-y", "@svgnew/mcp"],
+    "env": {
+      "SVG_NEW_API_KEY": ""
+    }
+  }
+}

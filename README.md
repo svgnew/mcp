@@ -36,6 +36,26 @@ Add to your MCP config:
 
 Add to your MCP settings with the same configuration above.
 
+### OpenAI Codex CLI
+
+Add svg.new to Codex:
+
+```
+codex mcp add svg-new -- npx -y @svgnew/mcp
+```
+
+Or install as a plugin:
+
+```
+codex install svg-new
+```
+
+Set your API key:
+
+```
+codex mcp add svg-new --env SVG_NEW_API_KEY=svk_your_key_here -- npx -y @svgnew/mcp
+```
+
 ## Available Tools
 
 | Tool | Description | Cost |
