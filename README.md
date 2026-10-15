@@ -61,10 +61,13 @@ codex mcp add svg-new --env SVG_NEW_API_KEY=svk_your_key_here -- npx -y @svgnew/
 | Tool | Description | Cost |
 |------|-------------|------|
 | `vectorize` | Convert image to SVG | 1 credit |
+| `vectorize_file` | Convert a local image file to SVG | 1 credit |
 | `recolor_svg` | Change colors in SVG | Free |
 | `simplify_svg` | Reduce color palette | Free |
 | `remove_background` | AI background removal | 1 credit |
+| `remove_background_file` | Background removal from a local image file | 1 credit |
 | `batch_vectorize` | Process multiple images | 1 credit/image |
+| `batch_vectorize_files` | Vectorize up to 10 local image files | 1 credit/image |
 | `get_batch_status` | Poll batch progress | Free |
 | `list_vectorizations` | View history | Free |
 
