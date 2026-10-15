@@ -1,6 +1,6 @@
 {
   "name": "@svgnew/mcp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MCP server for svg.new — AI-powered image to SVG vectorization",
   "main": "src/server.ts",
   "bin": {
@@ -31,5 +31,6 @@
   },
   "devDependencies": {
     "typescript": "^5.0.0"
-  }
+  },
+  "mcpName": "io.github.svgnew/mcp"
 }
