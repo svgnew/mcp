@@ -135,11 +135,14 @@ export function createSvgNewMcpServer(
 
   if (options.uploads) {
     const uploads = options.uploads;
-    server.tool(
+    server.registerTool(
       'create_upload',
-      'Get an upload URL for sending a local image file to svg.new over HTTP (up to 20 MB) without pasting base64. Returns the curl command to run and the upload_id to pass to vectorize afterwards.',
-      {},
-      { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
+      {
+        title: 'Get an upload link for a local image',
+        description: 'Get an upload URL for sending a local image file to svg.new over HTTP (up to 20 MB) without pasting base64. Returns the curl command to run and the upload_id to pass to vectorize afterwards.',
+        inputSchema: {},
+        annotations: { title: 'Get an upload link for a local image', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
+      },
       async () => {
         try {
           const ticket = await uploads.create();
@@ -186,14 +189,17 @@ export function createSvgNewMcpServer(
   }
 
   // Tool: vectorize an image
-  server.tool(
+  server.registerTool(
     'vectorize',
-    'Convert a raster image (PNG, JPG, WebP) to a clean SVG vector. Give the image inline (`image`, base64 data URL) or as a public HTTPS link (`image_url`).',
     {
-      ...imageArgs,
-      output: outputSchema,
+      title: 'Vectorize an image',
+      description: 'Convert a raster image (PNG, JPG, WebP) to a clean SVG vector. Give the image inline (`image`, base64 data URL) or as a public HTTPS link (`image_url`).',
+      inputSchema: {
+        ...imageArgs,
+        output: outputSchema,
+      },
+      annotations: { title: 'Vectorize an image', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     },
-    { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     async ({ image, image_url, upload_id, output }) => {
       try {
         // References are passed through: the API fetches URLs and reads uploads itself, and
@@ -213,7 +219,7 @@ export function createSvgNewMcpServer(
       description:
         'Convert a user-supplied PNG, JPEG, or WebP file into an editable SVG. Uses SVG.new credits.',
       inputSchema: { file: imageFileSchema, output: outputSchema },
-      annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
+      annotations: { title: 'Vectorize an attached image', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
       _meta: { 'openai/fileParams': ['file'] },
     },
     async ({ file, output }) => {
@@ -237,17 +243,20 @@ export function createSvgNewMcpServer(
   }
 
   // Tool: recolor SVG shapes
-  server.tool(
+  server.registerTool(
     'recolor_svg',
-    'Change colors in an SVG (given inline or by svg_url). Provide a mapping of old colors to new colors.',
     {
-      ...svgArgs,
-      color_map: z
-        .record(z.string(), z.string())
-        .describe('Map of old hex colors to new hex colors, e.g. {"#ff0000": "#0000ff"}'),
-      output: outputSchema,
+      title: 'Recolor an SVG',
+      description: 'Change colors in an SVG (given inline or by svg_url). Provide a mapping of old colors to new colors.',
+      inputSchema: {
+        ...svgArgs,
+        color_map: z
+          .record(z.string(), z.string())
+          .describe('Map of old hex colors to new hex colors, e.g. {"#ff0000": "#0000ff"}'),
+        output: outputSchema,
+      },
+      annotations: { title: 'Recolor an SVG', readOnlyHint: true, openWorldHint: true, destructiveHint: false },
     },
-    { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
     async ({ svg, svg_url, color_map, output }) => {
       try {
         const data = await apiCall('/api/agent/edit/recolor', { ...svgFields({ svg, svg_url }), color_map, ...(output === 'url' ? { output: 'url' } : {}) });
@@ -259,20 +268,23 @@ export function createSvgNewMcpServer(
   );
 
   // Tool: simplify SVG (reduce colors)
-  server.tool(
+  server.registerTool(
     'simplify_svg',
-    'Reduce the number of colors in an SVG (given inline or by svg_url) by quantizing the palette.',
     {
-      ...svgArgs,
-      max_colors: z
-        .number()
-        .int()
-        .min(1)
-        .max(256)
-        .describe('Maximum number of colors to keep (1-256)'),
-      output: outputSchema,
+      title: 'Reduce an SVG\'s colors',
+      description: 'Reduce the number of colors in an SVG (given inline or by svg_url) by quantizing the palette.',
+      inputSchema: {
+        ...svgArgs,
+        max_colors: z
+          .number()
+          .int()
+          .min(1)
+          .max(256)
+          .describe('Maximum number of colors to keep (1-256)'),
+        output: outputSchema,
+      },
+      annotations: { title: 'Reduce an SVG\'s colors', readOnlyHint: true, openWorldHint: true, destructiveHint: false },
     },
-    { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
     async ({ svg, svg_url, max_colors, output }) => {
       try {
         const data = await apiCall('/api/agent/edit/simplify', { ...svgFields({ svg, svg_url }), max_colors, ...(output === 'url' ? { output: 'url' } : {}) });
@@ -284,15 +296,18 @@ export function createSvgNewMcpServer(
   );
 
   // Tool: remove background
-  server.tool(
+  server.registerTool(
     'remove_background',
-    'Remove the background from an SVG (inline or by svg_url) using the original raster image, given inline (`image`), as a public HTTPS link (`image_url`) or as an upload (`upload_id`).',
     {
-      ...svgArgs,
-      ...imageArgs,
-      output: outputSchema,
+      title: 'Remove an SVG\'s background',
+      description: 'Remove the background from an SVG (inline or by svg_url) using the original raster image, given inline (`image`), as a public HTTPS link (`image_url`) or as an upload (`upload_id`).',
+      inputSchema: {
+        ...svgArgs,
+        ...imageArgs,
+        output: outputSchema,
+      },
+      annotations: { title: 'Remove an SVG\'s background', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     },
-    { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     async ({ svg, svg_url, image, image_url, upload_id, output }) => {
       try {
         const data = await apiCall('/api/agent/edit/remove-background', {
@@ -314,7 +329,7 @@ export function createSvgNewMcpServer(
       description:
         'Remove the background from an SVG using its original user-supplied raster image. Uses SVG.new credits.',
       inputSchema: { svg: z.string(), file: imageFileSchema },
-      annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
+      annotations: { title: 'Remove an SVG background using an attached image', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
       _meta: { 'openai/fileParams': ['file'] },
     },
     async ({ svg, file }) => {
@@ -328,15 +343,18 @@ export function createSvgNewMcpServer(
   );
 
   // Tool: submit batch vectorization
-  server.tool(
+  server.registerTool(
     'batch_vectorize',
-    'Submit multiple images for batch vectorization (up to 10 across base64 data URLs in `images`, public HTTPS links in `image_urls` and ticket uploads in `upload_ids`). Returns a batch ID for polling.',
     {
-      images: z.array(z.string()).max(10).optional().describe('Base64 image data URLs'),
-      image_urls: z.array(z.string()).max(10).optional().describe('Public HTTPS image links the server fetches itself'),
-      upload_ids: z.array(z.string()).max(10).optional().describe('Ids of files sent with create_upload (hosted server only)'),
+      title: 'Vectorize images as a batch',
+      description: 'Submit multiple images for batch vectorization (up to 10 across base64 data URLs in `images`, public HTTPS links in `image_urls` and ticket uploads in `upload_ids`). Returns a batch ID for polling.',
+      inputSchema: {
+        images: z.array(z.string()).max(10).optional().describe('Base64 image data URLs'),
+        image_urls: z.array(z.string()).max(10).optional().describe('Public HTTPS image links the server fetches itself'),
+        upload_ids: z.array(z.string()).max(10).optional().describe('Ids of files sent with create_upload (hosted server only)'),
+      },
+      annotations: { title: 'Vectorize images as a batch', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     },
-    { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     async ({ images = [], image_urls = [], upload_ids = [] }) => {
       try {
         const total = images.length + image_urls.length + upload_ids.length;
@@ -372,7 +390,7 @@ export function createSvgNewMcpServer(
       description:
         'Submit up to 10 user-supplied PNG, JPEG, or WebP files for vectorization. Uses SVG.new credits.',
       inputSchema: { files: z.array(imageFileSchema).min(1).max(10) },
-      annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
+      annotations: { title: 'Vectorize attached images as a batch', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
       _meta: { 'openai/fileParams': ['files'] },
     },
     async ({ files }) => {
@@ -395,13 +413,16 @@ export function createSvgNewMcpServer(
   );
 
   // Tool: get batch status
-  server.tool(
+  server.registerTool(
     'get_batch_status',
-    'Check the status of a batch vectorization job.',
     {
-      batch_id: z.string().describe('Batch job ID returned from batch_vectorize'),
+      title: 'Check a batch\'s progress',
+      description: 'Check the status of a batch vectorization job.',
+      inputSchema: {
+        batch_id: z.string().describe('Batch job ID returned from batch_vectorize'),
+      },
+      annotations: { title: 'Check a batch\'s progress', readOnlyHint: true, openWorldHint: true, destructiveHint: false },
     },
-    { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
     async ({ batch_id }) => {
       try {
         const data = await apiGet(`/api/agent/batch/${batch_id}`);
@@ -422,11 +443,14 @@ export function createSvgNewMcpServer(
   );
 
   // Tool: list vectorizations
-  server.tool(
+  server.registerTool(
     'list_vectorizations',
-    'List recent vectorizations for the authenticated user.',
-    {},
-    { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
+    {
+      title: 'List recent vectorizations',
+      description: 'List recent vectorizations for the authenticated user.',
+      inputSchema: {},
+      annotations: { title: 'List recent vectorizations', readOnlyHint: true, openWorldHint: true, destructiveHint: false },
+    },
     async () => {
       try {
         const data = await apiGet('/api/vectorizations');
