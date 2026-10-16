@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { downloadImageDataUrl, downloadImageUrlDataUrl } from './download-image';
+
 
 const imageFileSchema = z.object({
   download_url: z.string(),
@@ -23,22 +23,30 @@ const outputSchema = z
 /** The image argument shared by vectorize, remove_background and the batch tool: one of three forms. */
 const imageArgs = {
   image: z.string().optional().describe('Base64 image data URL ("data:image/png;base64,…"), practical up to about 100 KB'),
-  image_url: z.string().optional().describe('Public HTTPS URL of a PNG, JPEG or WebP (direct link, no redirect, up to 2.9 MB); the server fetches it'),
-  upload_id: z.string().optional().describe('Id of a file sent with an upload ticket from create_upload (hosted svg.new MCP server only); the way to send a local file of any size'),
+  image_url: z.string().optional().describe('Public HTTPS URL of a PNG, JPEG or WebP (direct link, no redirect, up to 20 MB); the API fetches it'),
+  upload_id: z.string().optional().describe('Id of a file sent with create_upload (hosted svg.new MCP server only), up to 20 MB; the API reads it from storage'),
+};
+
+/** The SVG argument shared by the editing tools: inline text or a public HTTPS URL (e.g. the link a vectorize result gave). */
+const svgArgs = {
+  svg: z.string().optional().describe('SVG content as a string (small SVGs)'),
+  svg_url: z.string().optional().describe('Public HTTPS URL of the SVG, e.g. the download link from vectorize (up to 20 MB); the API fetches it'),
 };
 
 /** What a host provides so clients can send files over HTTP instead of inline base64. */
 export type UploadHooks = {
   /** Mints an upload for the authenticated caller: a signed storage URL the client PUTs the file to. */
   create(): Promise<{ put_url: string; upload_id: string; expires_at: string; max_bytes: number }>;
-  /** The caller's uploaded image as a data URL (inline-size uploads only); consumes the upload. */
-  load(uploadId: string): Promise<string>;
 };
 
 type ImageArgs = { image?: string; image_url?: string; upload_id?: string };
+type SvgArgs = { svg?: string; svg_url?: string };
 
-/** The one data URL the tool should send upstream, from `image`, `image_url` or `upload_id`. */
-export async function resolveImage(args: ImageArgs, loadUpload?: UploadHooks['load']): Promise<string> {
+/**
+ * The image fields to send to the API: exactly one of `image`, `image_url`, `upload_id`. The API
+ * fetches URLs and reads uploads itself, so no bytes pass through here except an inline `image`.
+ */
+export function imageFields(args: ImageArgs, uploadsAvailable: boolean): Record<string, string> {
   const given = [args.image, args.image_url, args.upload_id].filter((v) => typeof v === 'string' && v.length > 0).length;
   if (given !== 1) {
     throw new Error('Give the image one way: `image` (base64 data URL), `image_url` (public HTTPS link) or `upload_id` (from create_upload)');
@@ -47,13 +55,20 @@ export async function resolveImage(args: ImageArgs, loadUpload?: UploadHooks['lo
     if (!/^data:image\/(png|jpeg|jpg|webp);base64,/.test(args.image)) {
       throw new Error('`image` must be a data:image/<png|jpeg|webp>;base64,… URL');
     }
-    return args.image;
+    return { image: args.image };
   }
   if (args.upload_id) {
-    if (!loadUpload) throw new Error('Uploads are not available on this server; use `image` or `image_url`');
-    return loadUpload(args.upload_id);
+    if (!uploadsAvailable) throw new Error('Uploads are not available on this server; use `image` or `image_url`');
+    return { upload_id: args.upload_id };
   }
-  return downloadImageUrlDataUrl(args.image_url!);
+  return { image_url: args.image_url! };
+}
+
+/** The SVG fields to send to the API: exactly one of `svg`, `svg_url`. */
+export function svgFields(args: SvgArgs): Record<string, string> {
+  const given = [args.svg, args.svg_url].filter((v) => typeof v === 'string' && v.length > 0).length;
+  if (given !== 1) throw new Error('Give the SVG one way: `svg` (the text) or `svg_url` (a public HTTPS link)');
+  return args.svg ? { svg: args.svg } : { svg_url: args.svg_url! };
 }
 
 /** The text a client gets back from create_upload: the exact command to run, then what to call. */
@@ -78,7 +93,7 @@ export function createSvgNewMcpServer(
   apiBase = 'https://svg.new',
   options: { uploads?: UploadHooks } = {}
 ) {
-  const loadUpload = options.uploads?.load;
+  const uploadsAvailable = !!options.uploads;
   const headers = {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
@@ -114,7 +129,7 @@ export function createSvgNewMcpServer(
     { name: 'svg-new', version: '1.2.0' },
     {
       instructions:
-        "Convert raster images to SVG, edit existing SVGs, and inspect the connected account's conversion history. Vectorization and background removal consume SVG.new credits. Give an image one of three ways: inline as a base64 data URL (small files, up to ~100 KB), as `image_url` (a public HTTPS link the server fetches itself, up to 2.9 MB), or as `upload_id` after sending the file with create_upload (any local file up to 20 MB, nothing passes through the model). Results come back inline when small; larger SVGs come back as a one-hour download link (`output: \"url\"` asks for the link always), which a client can save with curl.",
+        "Convert raster images to SVG, edit existing SVGs, and inspect the connected account's conversion history. Vectorization and background removal consume SVG.new credits. Give an image one of three ways: inline as a base64 data URL (small files, up to ~100 KB), as `image_url` (a public HTTPS link the API fetches itself, up to 20 MB), or as `upload_id` after sending the file with create_upload (any local file up to 20 MB, nothing passes through the model). Editing tools take the SVG inline (`svg`) or by link (`svg_url`, e.g. the link a previous result gave). Results come back inline when small; larger ones come back as one-hour download links (`output: \"url\"` asks for links always), which a client can save with curl.",
     }
   );
 
@@ -181,12 +196,9 @@ export function createSvgNewMcpServer(
     { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     async ({ image, image_url, upload_id, output }) => {
       try {
-        // A storage-backed upload is passed by id: the API reads the bytes itself, so the size
-        // never has to fit a request body here, and large results come back as a link.
-        const body = upload_id && options.uploads
-          ? { upload_id, output: output === 'inline' ? 'inline' : 'url' }
-          : { image: await resolveImage({ image, image_url, upload_id }, loadUpload) };
-        const data = await apiCall('/api/agent/vectorize', body);
+        // References are passed through: the API fetches URLs and reads uploads itself, and
+        // answers with a link when the result is large or when asked.
+        const data = await apiCall('/api/agent/vectorize', { ...imageFields({ image, image_url, upload_id }, uploadsAvailable), ...(output === 'url' ? { output: 'url' } : {}) });
         return await vectorizeResult(data, output);
       } catch (e: any) {
         return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
@@ -206,8 +218,7 @@ export function createSvgNewMcpServer(
     },
     async ({ file, output }) => {
       try {
-        const image = await downloadImageDataUrl(file);
-        const data = await apiCall('/api/agent/vectorize', { image });
+        const data = await apiCall('/api/agent/vectorize', { image_url: file.download_url, ...(output === 'url' ? { output: 'url' } : {}) });
         return await vectorizeResult(data, output);
       } catch (e: any) {
         return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
@@ -215,21 +226,32 @@ export function createSvgNewMcpServer(
     }
   );
 
+  /** An editing result: the SVG text when the API sent it, else its download link. */
+  function svgResult(data: any, lead?: string) {
+    const parts: { type: 'text'; text: string }[] = [];
+    if (lead) parts.push({ type: 'text', text: lead });
+    if (typeof data.svg === 'string') parts.push({ type: 'text', text: data.svg });
+    else if (data.svg_url) parts.push({ type: 'text', text: `SVG download (valid for one hour): ${data.svg_url}${data.png_url ? `\nTransparent PNG: ${data.png_url}` : ''}\nSave it with: curl -sL -o output.svg "${data.svg_url}"` });
+    else return { content: [{ type: 'text' as const, text: 'Error: the API returned neither the SVG nor a link' }], isError: true };
+    return { content: parts };
+  }
+
   // Tool: recolor SVG shapes
   server.tool(
     'recolor_svg',
-    'Change colors in an SVG. Provide a mapping of old colors to new colors.',
+    'Change colors in an SVG (given inline or by svg_url). Provide a mapping of old colors to new colors.',
     {
-      svg: z.string().describe('SVG content as a string'),
+      ...svgArgs,
       color_map: z
         .record(z.string(), z.string())
         .describe('Map of old hex colors to new hex colors, e.g. {"#ff0000": "#0000ff"}'),
+      output: outputSchema,
     },
     { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
-    async ({ svg, color_map }) => {
+    async ({ svg, svg_url, color_map, output }) => {
       try {
-        const data = await apiCall('/api/agent/edit/recolor', { svg, color_map });
-        return { content: [{ type: 'text', text: data.svg }] };
+        const data = await apiCall('/api/agent/edit/recolor', { ...svgFields({ svg, svg_url }), color_map, ...(output === 'url' ? { output: 'url' } : {}) });
+        return svgResult(data);
       } catch (e: any) {
         return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
       }
@@ -239,29 +261,22 @@ export function createSvgNewMcpServer(
   // Tool: simplify SVG (reduce colors)
   server.tool(
     'simplify_svg',
-    'Reduce the number of colors in an SVG by quantizing the palette.',
+    'Reduce the number of colors in an SVG (given inline or by svg_url) by quantizing the palette.',
     {
-      svg: z.string().describe('SVG content as a string'),
+      ...svgArgs,
       max_colors: z
         .number()
         .int()
         .min(1)
         .max(256)
         .describe('Maximum number of colors to keep (1-256)'),
+      output: outputSchema,
     },
     { readOnlyHint: true, openWorldHint: true, destructiveHint: false },
-    async ({ svg, max_colors }) => {
+    async ({ svg, svg_url, max_colors, output }) => {
       try {
-        const data = await apiCall('/api/agent/edit/simplify', { svg, max_colors });
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Simplified from ${data.colors_before} to ${data.colors_after} colors.`,
-            },
-            { type: 'text', text: data.svg },
-          ],
-        };
+        const data = await apiCall('/api/agent/edit/simplify', { ...svgFields({ svg, svg_url }), max_colors, ...(output === 'url' ? { output: 'url' } : {}) });
+        return svgResult(data, `Simplified from ${data.colors_before} to ${data.colors_after} colors.`);
       } catch (e: any) {
         return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
       }
@@ -271,19 +286,21 @@ export function createSvgNewMcpServer(
   // Tool: remove background
   server.tool(
     'remove_background',
-    'Remove the background from an SVG using the original raster image for reference. Give the image inline (`image`) or as a public HTTPS link (`image_url`).',
+    'Remove the background from an SVG (inline or by svg_url) using the original raster image, given inline (`image`), as a public HTTPS link (`image_url`) or as an upload (`upload_id`).',
     {
-      svg: z.string().describe('SVG content as a string'),
+      ...svgArgs,
       ...imageArgs,
+      output: outputSchema,
     },
     { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
-    async ({ svg, image, image_url, upload_id }) => {
+    async ({ svg, svg_url, image, image_url, upload_id, output }) => {
       try {
         const data = await apiCall('/api/agent/edit/remove-background', {
-          svg,
-          image: await resolveImage({ image, image_url, upload_id }, loadUpload),
+          ...svgFields({ svg, svg_url }),
+          ...imageFields({ image, image_url, upload_id }, uploadsAvailable),
+          ...(output === 'url' ? { output: 'url' } : {}),
         });
-        return { content: [{ type: 'text', text: data.svg }] };
+        return svgResult(data);
       } catch (e: any) {
         return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
       }
@@ -302,9 +319,8 @@ export function createSvgNewMcpServer(
     },
     async ({ svg, file }) => {
       try {
-        const image = await downloadImageDataUrl(file);
-        const data = await apiCall('/api/agent/edit/remove-background', { svg, image });
-        return { content: [{ type: 'text', text: data.svg }] };
+        const data = await apiCall('/api/agent/edit/remove-background', { svg, image_url: file.download_url });
+        return svgResult(data);
       } catch (e: any) {
         return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
       }
@@ -318,7 +334,7 @@ export function createSvgNewMcpServer(
     {
       images: z.array(z.string()).max(10).optional().describe('Base64 image data URLs'),
       image_urls: z.array(z.string()).max(10).optional().describe('Public HTTPS image links the server fetches itself'),
-      upload_ids: z.array(z.string()).max(10).optional().describe('Ids of files sent with upload tickets from create_upload (hosted server only)'),
+      upload_ids: z.array(z.string()).max(10).optional().describe('Ids of files sent with create_upload (hosted server only)'),
     },
     { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     async ({ images = [], image_urls = [], upload_ids = [] }) => {
@@ -327,12 +343,13 @@ export function createSvgNewMcpServer(
         if (total === 0 || total > 10) {
           throw new Error('Give between 1 and 10 images across `images`, `image_urls` and `upload_ids`');
         }
-        const fetched = await Promise.all([
-          ...image_urls.map((url) => resolveImage({ image_url: url })),
-          ...upload_ids.map((id) => resolveImage({ upload_id: id }, loadUpload)),
-        ]);
+        if (upload_ids.length && !uploadsAvailable) throw new Error('Uploads are not available on this server; use `images` or `image_urls`');
         const data = await apiCall('/api/agent/batch', {
-          images: [...images, ...fetched].map((img) => ({ image: img })),
+          images: [
+            ...images.map((image) => ({ image })),
+            ...image_urls.map((image_url) => ({ image_url })),
+            ...upload_ids.map((upload_id) => ({ upload_id })),
+          ],
         });
         return {
           content: [
@@ -360,9 +377,8 @@ export function createSvgNewMcpServer(
     },
     async ({ files }) => {
       try {
-        const images = await Promise.all(files.map(downloadImageDataUrl));
         const data = await apiCall('/api/agent/batch', {
-          images: images.map((image) => ({ image })),
+          images: files.map((file) => ({ image_url: file.download_url })),
         });
         return {
           content: [
@@ -391,8 +407,7 @@ export function createSvgNewMcpServer(
         const data = await apiGet(`/api/agent/batch/${batch_id}`);
         const summary = `Status: ${data.status} | Completed: ${data.completed_items}/${data.total_items} | Failed: ${data.failed_items}`;
         const items = (data.items || [])
-          .filter((i: any) => i.status === 'completed')
-          .map((i: any) => `Item ${i.index}: ${i.prompt_id || 'no id'}`)
+          .map((i: any) => `Item ${i.index}: ${i.status}${i.svg_url ? ` — ${i.svg_url}` : ''}${i.error ? ` — ${i.error}` : ''}`)
           .join('\n');
         return {
           content: [

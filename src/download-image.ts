@@ -59,8 +59,8 @@ export async function downloadImageDataUrl(file: McpImageFile): Promise<string> 
   return downloadImageUrlDataUrl(file.download_url);
 }
 
-/** Fetch a public HTTPS image URL (no redirects, no local network) as a base64 data URL. */
-export async function downloadImageUrlDataUrl(downloadUrl: string): Promise<string> {
+/** Fetch a public HTTPS URL (no redirects, no local network) as raw bytes, up to `maxBytes`. */
+export async function downloadPublicBytes(downloadUrl: string, maxBytes = MAX_IMAGE_BYTES): Promise<Buffer> {
   const url = new URL(downloadUrl);
   if (url.protocol !== 'https:' || url.port || url.username || url.password) {
     throw new Error('Image download URL must use standard HTTPS');
@@ -89,8 +89,8 @@ export async function downloadImageUrlDataUrl(downloadUrl: string): Promise<stri
         let size = 0;
         res.on('data', (chunk: Buffer) => {
           size += chunk.length;
-          if (size > MAX_IMAGE_BYTES) {
-            req.destroy(new Error('Image exceeds the 2.9 MB download limit'));
+          if (size > maxBytes) {
+            req.destroy(new Error(`Download exceeds the ${Math.round(maxBytes / 100_000) / 10} MB limit`));
             return;
           }
           chunks.push(chunk);
@@ -104,6 +104,12 @@ export async function downloadImageUrlDataUrl(downloadUrl: string): Promise<stri
     req.end();
   });
 
+  return bytes;
+}
+
+/** A public HTTPS image URL as a base64 data URL (PNG, JPEG or WebP by signature). */
+export async function downloadImageUrlDataUrl(downloadUrl: string, maxBytes = MAX_IMAGE_BYTES): Promise<string> {
+  const bytes = await downloadPublicBytes(downloadUrl, maxBytes);
   const mime = imageMime(bytes);
   if (!mime) throw new Error('Only PNG, JPEG, and WebP image files are supported');
   return `data:${mime};base64,${bytes.toString('base64')}`;
