@@ -29,9 +29,9 @@ const imageArgs = {
 
 /** What a host provides so clients can send files over HTTP instead of inline base64. */
 export type UploadHooks = {
-  /** Mints a ticket for the authenticated caller. */
-  create(): Promise<{ upload_url: string; ticket: string; upload_id: string; expires_at: string; max_bytes: number }>;
-  /** The caller's uploaded image as a data URL; consumes the upload. */
+  /** Mints an upload for the authenticated caller: a signed storage URL the client PUTs the file to. */
+  create(): Promise<{ put_url: string; upload_id: string; expires_at: string; max_bytes: number }>;
+  /** The caller's uploaded image as a data URL (inline-size uploads only); consumes the upload. */
   load(uploadId: string): Promise<string>;
 };
 
@@ -59,10 +59,10 @@ export async function resolveImage(args: ImageArgs, loadUpload?: UploadHooks['lo
 /** The text a client gets back from create_upload: the exact command to run, then what to call. */
 export function uploadInstructions(t: Awaited<ReturnType<UploadHooks['create']>>): string {
   return [
-    `Upload ticket ${t.upload_id} (valid until ${t.expires_at}, up to ${Math.floor(t.max_bytes / 1_000_000 * 10) / 10} MB, PNG/JPEG/WebP).`,
-    'Send the file bytes with this command (replace the path):',
-    `curl -sS -X POST -H "X-Upload-Ticket: ${t.ticket}" --data-binary @/path/to/image.png "${t.upload_url}"`,
-    `Then call vectorize (or remove_background) with { "upload_id": "${t.upload_id}" }. The ticket works once.`,
+    `Upload ${t.upload_id} (valid until ${t.expires_at}, up to ${Math.floor((t.max_bytes / 1_000_000) * 10) / 10} MB, PNG/JPEG/WebP).`,
+    'Send the file with this command (replace the path; set Content-Type to image/png, image/jpeg or image/webp):',
+    `curl -sS -X PUT -H "Content-Type: image/png" --upload-file /path/to/image.png "${t.put_url}"`,
+    `Then call vectorize with { "upload_id": "${t.upload_id}" } (remove_background and batch_vectorize take it too, up to 2.9 MB). The upload works once.`,
   ].join('\n');
 }
 
@@ -114,7 +114,7 @@ export function createSvgNewMcpServer(
     { name: 'svg-new', version: '1.2.0' },
     {
       instructions:
-        "Convert raster images to SVG, edit existing SVGs, and inspect the connected account's conversion history. Vectorization and background removal consume SVG.new credits. Give an image one of three ways: inline as a base64 data URL (small files, up to ~100 KB), as `image_url` (a public HTTPS link the server fetches itself, up to 2.9 MB), or as `upload_id` after sending the file with an upload ticket from create_upload (any local file up to 2.9 MB, nothing passes through the model). Results come back inline when small; larger SVGs come back as a one-hour download link (`output: \"url\"` asks for the link always), which a client can save with curl.",
+        "Convert raster images to SVG, edit existing SVGs, and inspect the connected account's conversion history. Vectorization and background removal consume SVG.new credits. Give an image one of three ways: inline as a base64 data URL (small files, up to ~100 KB), as `image_url` (a public HTTPS link the server fetches itself, up to 2.9 MB), or as `upload_id` after sending the file with create_upload (any local file up to 20 MB, nothing passes through the model). Results come back inline when small; larger SVGs come back as a one-hour download link (`output: \"url\"` asks for the link always), which a client can save with curl.",
     }
   );
 
@@ -122,7 +122,7 @@ export function createSvgNewMcpServer(
     const uploads = options.uploads;
     server.tool(
       'create_upload',
-      'Get an upload ticket for sending a local image file to svg.new over HTTP (any size up to 2.9 MB) without pasting base64. Returns the curl command to run and the upload_id to pass to vectorize or remove_background afterwards.',
+      'Get an upload URL for sending a local image file to svg.new over HTTP (up to 20 MB) without pasting base64. Returns the curl command to run and the upload_id to pass to vectorize afterwards.',
       {},
       { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
       async () => {
@@ -138,9 +138,15 @@ export function createSvgNewMcpServer(
 
   /** The vectorize result: inline SVG, or a download link for large output / on request. */
   async function vectorizeResult(data: any, output: 'auto' | 'inline' | 'url' | undefined) {
-    const svg: string = data.svg;
-    const stats = svgStats(svg);
+    const svg: string | undefined = typeof data.svg === 'string' ? data.svg : undefined;
+    const stats = svg ? svgStats(svg) : { bytes: data.svg_bytes ?? 0, paths: data.paths ?? 0, kb: Math.round((data.svg_bytes ?? 0) / 1024) };
     const status = `Vectorization complete (ID: ${data.id}): ${stats.kb} KB, ${stats.paths} paths. Credits remaining: ${data.metadata?.credits_remaining ?? 'unknown'}`;
+    if (!svg) {
+      // The API kept the SVG in storage (large result, or a storage-backed upload) and sent a link.
+      const link: string | undefined = data.svg_url;
+      if (!link) return { content: [{ type: 'text' as const, text: `${status} (the API returned neither the SVG nor a link)` }], isError: true };
+      return { content: [{ type: 'text' as const, text: `${status}\nSVG download (valid for one hour): ${link}\nSave it with: curl -sL -o output.svg "${link}"` }] };
+    }
     const asLink = output === 'url' || (output !== 'inline' && stats.bytes > INLINE_SVG_LIMIT);
     if (!asLink) {
       return { content: [{ type: 'text' as const, text: status }, { type: 'text' as const, text: svg }] };
@@ -175,7 +181,12 @@ export function createSvgNewMcpServer(
     { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     async ({ image, image_url, upload_id, output }) => {
       try {
-        const data = await apiCall('/api/agent/vectorize', { image: await resolveImage({ image, image_url, upload_id }, loadUpload) });
+        // A storage-backed upload is passed by id: the API reads the bytes itself, so the size
+        // never has to fit a request body here, and large results come back as a link.
+        const body = upload_id && options.uploads
+          ? { upload_id, output: output === 'inline' ? 'inline' : 'url' }
+          : { image: await resolveImage({ image, image_url, upload_id }, loadUpload) };
+        const data = await apiCall('/api/agent/vectorize', body);
         return await vectorizeResult(data, output);
       } catch (e: any) {
         return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
