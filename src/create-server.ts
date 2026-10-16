@@ -77,7 +77,7 @@ export function uploadInstructions(t: Awaited<ReturnType<UploadHooks['create']>>
     `Upload ${t.upload_id} (valid until ${t.expires_at}, up to ${Math.floor((t.max_bytes / 1_000_000) * 10) / 10} MB, PNG/JPEG/WebP).`,
     'Send the file with this command (replace the path; set Content-Type to image/png, image/jpeg or image/webp):',
     `curl -sS -X PUT -H "Content-Type: image/png" --upload-file /path/to/image.png "${t.put_url}"`,
-    `Then call vectorize with { "upload_id": "${t.upload_id}" } (remove_background and batch_vectorize take it too, up to 2.9 MB). The upload works once.`,
+    `Then call vectorize with { "upload_id": "${t.upload_id}" } (remove_background and batch_vectorize take it too). The upload works once.`,
   ].join('\n');
 }
 
@@ -327,14 +327,18 @@ export function createSvgNewMcpServer(
     {
       title: 'Remove an SVG background using an attached image',
       description:
-        'Remove the background from an SVG using its original user-supplied raster image. Uses SVG.new credits.',
-      inputSchema: { svg: z.string(), file: imageFileSchema },
+        'Remove the background from an SVG (inline or by svg_url) using its original user-supplied raster image. Uses SVG.new credits.',
+      inputSchema: { ...svgArgs, file: imageFileSchema, output: outputSchema },
       annotations: { title: 'Remove an SVG background using an attached image', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
       _meta: { 'openai/fileParams': ['file'] },
     },
-    async ({ svg, file }) => {
+    async ({ svg, svg_url, file, output }) => {
       try {
-        const data = await apiCall('/api/agent/edit/remove-background', { svg, image_url: file.download_url });
+        const data = await apiCall('/api/agent/edit/remove-background', {
+          ...svgFields({ svg, svg_url }),
+          image_url: file.download_url,
+          ...(output === 'url' ? { output: 'url' } : {}),
+        });
         return svgResult(data);
       } catch (e: any) {
         return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
