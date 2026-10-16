@@ -1,10 +1,45 @@
 ---
 name: vectorize
-description: Convert a raster image to a clean SVG vector using svg.new
+description: "Convert a raster image (PNG, JPG, WebP) to a clean, scalable SVG vector using AI tracing. Triggers on: vectorize, convert to svg, trace image, image to svg, make svg, png to svg, jpg to svg."
 ---
 
-Use the svg-new MCP server to convert raster images (PNG, JPG, WebP) to SVG vectors.
+# Vectorize Image to SVG
 
-1. Call the `vectorize` tool with a base64-encoded image (include the data URL prefix like `data:image/png;base64,...`)
-2. The tool returns the SVG content and a vectorization ID
-3. You can then use `recolor_svg`, `simplify_svg`, or `remove_background` to edit the result
+Convert a raster image to a clean SVG vector using svg.new's AI tracing engine.
+
+## Prerequisites
+
+Use the svg.new MCP tools (`mcp__svgnew__*`) if they are available in this session; they need no API key. Otherwise the `SVG_NEW_API_KEY` environment variable must be set. If neither is available, tell the user:
+> Connect svg.new with `claude mcp add --transport http --scope user svgnew https://svg.new/api/mcp` and `/mcp` → Authenticate, or generate an API key at https://svg.new/account and set `export SVG_NEW_API_KEY="svk_..."`.
+
+Do not fall back to a local tracer (vtracer, potrace) unless the user asks for one.
+
+Files over ~100 KB are too big to pass inline to the MCP `vectorize` tool. Call `create_upload`, run the curl command it returns with the file's path, then call `vectorize` with the `upload_id` (any local file up to 2.9 MB, no key needed). If the image is at a public HTTPS URL, `image_url` also works. Otherwise use the curl route below, which builds the base64 in the shell. Results over 64 KB come back as a one-hour download link; save it with `curl -sL -o output.svg "<link>"`.
+## Steps
+
+1. Identify the image file from the user's request or `$ARGUMENTS`
+2. Read the file and determine its MIME type from the extension:
+   - `.png` → `image/png`
+   - `.jpg` / `.jpeg` → `image/jpeg`
+   - `.webp` → `image/webp`
+3. Base64-encode the file contents
+4. Construct the data URL: `data:<mime>;base64,<encoded>`
+5. Call the API:
+
+```bash
+curl -s -X POST "${SVG_NEW_API_URL:-https://svg.new}/api/agent/vectorize" \
+  -H "Authorization: Bearer $SVG_NEW_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"image\": \"$DATA_URL\"}"
+```
+
+6. Extract the `svg` field from the JSON response
+7. Write it to a `.svg` file (same name as input, different extension)
+8. Report the output path and credits remaining from `metadata.credits_remaining`
+
+## Notes
+
+- Maximum image size: 20MB
+- Costs 1 credit per vectorization
+- The API returns the full SVG as a string in the `svg` field
+- The `id` field can be used to view the result at `https://svg.new/edit/{id}`

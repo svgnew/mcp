@@ -29,7 +29,7 @@ function isPublicIpv4(address: string): boolean {
   return true;
 }
 
-function imageMime(bytes: Buffer): string | null {
+export function imageMime(bytes: Buffer): string | null {
   if (bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
   if (bytes.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'))) return 'image/jpeg';
   if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') {
@@ -38,9 +38,30 @@ function imageMime(bytes: Buffer): string | null {
   return null;
 }
 
+/**
+ * A lookup that always answers with the address already vetted above, so a second DNS answer
+ * cannot send the socket elsewhere. Node calls it with `{ all: true }` and expects an array of
+ * `{ address, family }` when it picks the address family itself (the default since Node 20), and
+ * with the plain `(err, address, family)` shape otherwise; both are honoured.
+ */
+export function pinnedLookup(address: string) {
+  return (_hostname: string, options: unknown, callback: (...args: unknown[]) => void) => {
+    if ((options as { all?: boolean } | undefined)?.all) {
+      callback(null, [{ address, family: 4 }]);
+    } else {
+      callback(null, address, 4);
+    }
+  };
+}
+
 /** Fetch a ChatGPT file URL without allowing redirects or local-network connections. */
 export async function downloadImageDataUrl(file: McpImageFile): Promise<string> {
-  const url = new URL(file.download_url);
+  return downloadImageUrlDataUrl(file.download_url);
+}
+
+/** Fetch a public HTTPS image URL (no redirects, no local network) as a base64 data URL. */
+export async function downloadImageUrlDataUrl(downloadUrl: string): Promise<string> {
+  const url = new URL(downloadUrl);
   if (url.protocol !== 'https:' || url.port || url.username || url.password) {
     throw new Error('Image download URL must use standard HTTPS');
   }
@@ -56,7 +77,7 @@ export async function downloadImageDataUrl(file: McpImageFile): Promise<string> 
       url,
       {
         timeout: 15_000,
-        lookup: (_hostname, _options, callback) => callback(null, pinnedAddress, 4),
+        lookup: pinnedLookup(pinnedAddress) as unknown as import('node:net').LookupFunction,
       },
       (res) => {
         if (res.statusCode !== 200) {
