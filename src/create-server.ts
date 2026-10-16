@@ -24,13 +24,13 @@ const outputSchema = z
 const imageArgs = {
   image: z.string().optional().describe('Base64 image data URL ("data:image/png;base64,…"), practical up to about 100 KB'),
   image_url: z.string().optional().describe('Public HTTPS URL of a PNG, JPEG or WebP (direct link, no redirect, up to 20 MB); the API fetches it'),
-  upload_id: z.string().optional().describe('Id of a file sent with create_upload (hosted svg.new MCP server only), up to 20 MB; the API reads it from storage'),
+  upload_id: z.string().optional().describe('Id of an uploaded image file (hosted svg.new MCP server only), up to 20 MB; the API reads it from storage'),
 };
 
 /** The SVG argument shared by the editing tools: inline text or a public HTTPS URL (e.g. the link a vectorize result gave). */
 const svgArgs = {
   svg: z.string().optional().describe('SVG content as a string (small SVGs)'),
-  svg_url: z.string().optional().describe('Public HTTPS URL of the SVG, e.g. the download link from vectorize (up to 20 MB); the API fetches it'),
+  svg_url: z.string().optional().describe('Public HTTPS URL of the SVG, such as a download link from an earlier result (up to 20 MB); the API fetches it'),
 };
 
 /** What a host provides so clients can send files over HTTP instead of inline base64. */
@@ -139,7 +139,7 @@ export function createSvgNewMcpServer(
       'create_upload',
       {
         title: 'Get an upload link for a local image',
-        description: 'Get an upload URL for sending a local image file to svg.new over HTTP (up to 20 MB) without pasting base64. Returns the curl command to run and the upload_id to pass to vectorize afterwards.',
+        description: 'Get an upload URL for sending a local image file to svg.new over HTTP (up to 20 MB) without pasting base64. Returns an upload_id and the curl command that sends the file.',
         inputSchema: {},
         annotations: { title: 'Get an upload link for a local image', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
       },
@@ -351,11 +351,11 @@ export function createSvgNewMcpServer(
     'batch_vectorize',
     {
       title: 'Vectorize images as a batch',
-      description: 'Submit multiple images for batch vectorization (up to 10 across base64 data URLs in `images`, public HTTPS links in `image_urls` and ticket uploads in `upload_ids`). Returns a batch ID for polling.',
+      description: 'Submit multiple images for batch vectorization (up to 10 across base64 data URLs in `images`, public HTTPS links in `image_urls` and uploaded files in `upload_ids`). Returns a batch ID.',
       inputSchema: {
         images: z.array(z.string()).max(10).optional().describe('Base64 image data URLs'),
         image_urls: z.array(z.string()).max(10).optional().describe('Public HTTPS image links the server fetches itself'),
-        upload_ids: z.array(z.string()).max(10).optional().describe('Ids of files sent with create_upload (hosted server only)'),
+        upload_ids: z.array(z.string()).max(10).optional().describe('Ids of uploaded image files (hosted server only)'),
       },
       annotations: { title: 'Vectorize images as a batch', readOnlyHint: false, openWorldHint: true, destructiveHint: false },
     },
@@ -423,7 +423,7 @@ export function createSvgNewMcpServer(
       title: 'Check a batch\'s progress',
       description: 'Check the status of a batch vectorization job.',
       inputSchema: {
-        batch_id: z.string().describe('Batch job ID returned from batch_vectorize'),
+        batch_id: z.string().describe('Batch job ID returned when the batch was submitted'),
       },
       annotations: { title: 'Check a batch\'s progress', readOnlyHint: true, openWorldHint: true, destructiveHint: false },
     },
