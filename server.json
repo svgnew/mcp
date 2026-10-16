@@ -1,0 +1,44 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.svgnew/mcp",
+  "title": "SVG.new",
+  "description": "Convert PNG, JPG and WebP to SVG. Recolor an SVG, reduce its colors or remove its background.",
+  "version": "1.3.1",
+  "websiteUrl": "https://svg.new/mcp",
+  "repository": {
+    "url": "https://github.com/svgnew/mcp",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://svg.new/icon.png",
+      "mimeType": "image/png"
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://svg.new/api/mcp"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@svgnew/mcp",
+      "version": "1.3.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SVG_NEW_API_KEY",
+          "description": "SVG.new API key (starts with svk_). Create one at https://svg.new/account.",
+          "format": "string",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
