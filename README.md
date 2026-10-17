@@ -16,7 +16,7 @@ claude mcp add --transport http --scope user svgnew https://svg.new/api/mcp
 gemini extensions install https://github.com/svgnew/mcp
 ```
 
-In Claude, open Settings, Connectors, Add custom connector, enter the URL above and sign in. Cline and other agents can follow [llms-install.md](llms-install.md). Setup for each client: [svg.new/mcp](https://svg.new/mcp).
+In Claude, open Settings, Connectors, Add custom connector, enter the URL above and sign in. Cline and other agents can follow [llms-install.md](llms-install.md). The [cursor](cursor/) folder is the Cursor plugin for the hosted server. Setup for each client: [svg.new/mcp](https://svg.new/mcp).
 
 ## Quick Start (local server)
 

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "svg-new": {
+      "type": "http",
+      "url": "https://svg.new/api/mcp"
+    }
+  }
+}
