@@ -4,7 +4,21 @@ MCP (Model Context Protocol) server for [svg.new](https://svg.new) — AI-powere
 
 Use svg.new from any MCP-compatible client: Claude Code, Claude Desktop, Cursor, Windsurf, and more.
 
-## Quick Start
+## Hosted server (sign in, no API key)
+
+SVG.new hosts this server at `https://svg.new/api/mcp` (Streamable HTTP). Clients that support OAuth sign in with your SVG.new account; there is nothing to install. Clients that send headers can use `Authorization: Bearer svk_...` with an API key instead.
+
+```bash
+# Claude Code (then run /mcp, pick svgnew and choose Authenticate)
+claude mcp add --transport http --scope user svgnew https://svg.new/api/mcp
+
+# Gemini CLI (then run /mcp auth svg-new)
+gemini extensions install https://github.com/svgnew/mcp
+```
+
+In Claude, open Settings, Connectors, Add custom connector, enter the URL above and sign in. Cline and other agents can follow [llms-install.md](llms-install.md). Setup for each client: [svg.new/mcp](https://svg.new/mcp).
+
+## Quick Start (local server)
 
 ```bash
 npx @svgnew/mcp
