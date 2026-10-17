@@ -1,0 +1,30 @@
+{
+  "name": "svg-new",
+  "displayName": "SVG.new",
+  "version": "1.0.0",
+  "description": "Convert PNG, JPG and WebP to SVG. Recolor an SVG, reduce its colors or remove its background.",
+  "author": {
+    "name": "SVG.new",
+    "email": "contact@svg.new"
+  },
+  "homepage": "https://svg.new/mcp",
+  "repository": "https://github.com/svgnew/mcp",
+  "license": "MIT",
+  "logo": "assets/logo.png",
+  "keywords": [
+    "svg",
+    "vectorize",
+    "image-to-svg",
+    "png-to-svg",
+    "background-removal",
+    "mcp"
+  ],
+  "category": "integrations",
+  "tags": [
+    "svg",
+    "images",
+    "design",
+    "mcp"
+  ],
+  "mcpServers": "./mcp.json"
+}

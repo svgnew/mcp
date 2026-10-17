@@ -1,0 +1,17 @@
+{
+  "name": "svg-new",
+  "owner": {
+    "name": "SVG.new",
+    "email": "contact@svg.new"
+  },
+  "metadata": {
+    "description": "SVG.new for Cursor: convert images to SVG and edit SVGs through the hosted SVG.new MCP server."
+  },
+  "plugins": [
+    {
+      "name": "svg-new",
+      "source": "cursor",
+      "description": "Convert PNG, JPG and WebP to SVG. Recolor an SVG, reduce its colors or remove its background."
+    }
+  ]
+}
