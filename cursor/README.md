@@ -37,7 +37,7 @@ Sign-in is OAuth. The server answers `401` until you sign in, and Cursor finds t
 | `create_upload` | Get an upload link for a local image up to 20 MB | Free |
 | `list_vectorizations` | List recent vectorizations | Free |
 
-Free accounts get 3 vectorizations a day. Large results come back as one-hour download links.
+Free accounts get 1 vectorization a day. Large results come back as one-hour download links.
 
 ## Links
 
